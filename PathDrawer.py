@@ -3,7 +3,6 @@ import numpy as np
 from scipy.interpolate import splprep, splev
 
 def set_background_with_texture(canvas, texture):
-        # Get dimensions
         canvas_h, canvas_w = canvas.shape[:2]
         texture_h, texture_w = texture.shape[:2]
 
@@ -17,7 +16,6 @@ def set_background_with_texture(canvas, texture):
                 # Determine the corresponding ROI from the texture
                 texture_roi = texture[: y_end - y, : x_end - x]
 
-                # Paste the texture into the canvas
                 canvas[y:y_end, x:x_end] = texture_roi
 
         return canvas
@@ -28,8 +26,7 @@ def calculate_spline(points):
     tck, u = splprep([points[:, 0], points[:, 1]], s=0, k=k)
     u_fine = np.linspace(0, 1, 500)
     x_new, y_new = splev(u_fine, tck)
-    return x_new, y_new
-    
+    return x_new, y_new  
     
 def draw_spline(image, points, color):
         x_new, y_new = calculate_spline(points)
@@ -39,7 +36,11 @@ def draw_spline(image, points, color):
             cv2.line(image, pt1, pt2, color, 2)
 
 class PathDrawer:
-    def __init__(self, path_texture, grass_texture, height=600, width=800, grid_size=(64, 64), points_color=(255, 255, 255), line_color=(255, 0, 255)):
+    def __init__(
+        self, path_texture, grass_texture, 
+        height=600, width=800, grid_size=(64, 64), 
+        points_color=(255, 255, 255), line_color=(255, 0, 255)
+    ):
         self.selected_points = []
         
         self.points_color = points_color
@@ -89,18 +90,25 @@ class PathDrawer:
     def draw_path_with_texture(self):
         self.reset_image()
         if len(self.selected_points) == 2:
-            x_new = np.linspace(self.selected_points[0][0], self.selected_points[1][0], 100)
-            y_new = np.linspace(self.selected_points[0][1], self.selected_points[1][1], 100)
+            x_new = np.linspace(
+                self.selected_points[0][0], 
+                self.selected_points[1][0], 
+                100
+            )
+            y_new = np.linspace(
+                self.selected_points[0][1], 
+                self.selected_points[1][1], 
+                100
+            )
         elif len(self.selected_points) > 2:
             x_new, y_new = calculate_spline(self.selected_points)
         else:
             print("Need at least 2 points to draw a path")
             return
     
-        # Create a grid of the specified size
         grid_width, grid_height = self.grid_size
 
-        resized_texture = cv2.resize(self.path_texture, (grid_width, grid_height))
+        resized_texture = cv2.resize(self.path_texture, self.grid_size)
 
         # Determine which grid cells the path overlaps
         for x, y in zip(x_new, y_new):
@@ -118,9 +126,6 @@ class PathDrawer:
             y_end = min(self.image.shape[0], y_start + grid_height)
 
             # Compute the region of interest (ROI) on the texture
-            texture_roi = resized_texture[
-                : y_end - y_start, : x_end - x_start
-            ]
+            texture_roi = resized_texture[: y_end - y_start, : x_end - x_start]
 
-            # Blend the texture into the canvas
             self.image[y_start:y_end, x_start:x_end] = texture_roi
