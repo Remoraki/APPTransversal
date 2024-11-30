@@ -5,7 +5,6 @@ texture = cv2.imread("Textures/texture3.png")
 grass_texture = cv2.imread("Textures/tilable-img_0044-dark.png")
 
 path_drawer = PathDrawer(texture, grass_texture)
-path_width = 10
 
 cv2.imshow("Path from Points", path_drawer.image)
 cv2.setMouseCallback("Path from Points", path_drawer.select_points)
@@ -26,7 +25,7 @@ while True:
             cv2.imshow("Path from Points", path_drawer.image)
             
     elif key == ord('t'):  # Toggle the spline drawing when 't' is pressed
-        path_drawer.toggle_spline(path_width)
+        path_drawer.toggle_spline()
 
     elif key == ord('q'):  # Exit the loop when 'q' is pressed
         break
