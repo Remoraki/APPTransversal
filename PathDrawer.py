@@ -126,12 +126,12 @@ class PathDrawer:
                         mask = np.zeros((grid_height, grid_width), dtype=np.uint8)
                         
                         for contour in contours:
-                            contour_s = contour.squeeze()
-                            contour_s[:, 0] += x_start
-                            contour_s[:, 1] += y_start
+                            contour = contour.squeeze()
+                            contour[:, 0] += x_start
+                            contour[:, 1] += y_start
                             
                             # Check if the contour is within the path width
-                            is_within_path = distance_from_path(contour_s, x, y) <= half_path_width
+                            is_within_path = distance_from_path(contour, x, y) <= half_path_width
                             
                             if is_within_path:
                                 mask = cv2.fillPoly(mask, [contour], 255)
