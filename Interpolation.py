@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
-from scipy.interpolate import make_interp_spline
+from scipy.interpolate import make_interp_spline, splprep,splev
 import sys
+from chemin import Chemin 
 
 class LoadIm():
     def __init__(self, width=800, height=600, texture_path="Textures/grass.jpg"):
@@ -10,7 +11,7 @@ class LoadIm():
         self.background = (0, 0, 0)
         self.cursor = (0, 0, 255)
 
-        
+        self.chemin = Chemin(width, height, 14,13)
 
         # Charger l'image de texture (background)
         self.background_image = cv2.imread(texture_path)
@@ -39,6 +40,7 @@ class LoadIm():
             # Appliquer la texture de fond
             self.screen = self.background_image.copy()
 
+            self.chemin.draw_grid(self.screen)
             # Afficher les points ajoutés sur l'image
             for point in self.points:
                 cv2.circle(self.screen, (point[0], point[1]), 5, self.cursor, -1)
@@ -53,32 +55,29 @@ class LoadIm():
                 points = np.array(self.points)
                 
                 # Assurez-vous que vous avez au moins deux points pour l'interpolation
-                if len(points) > 1:
-                    # Tri des points pour s'assurer que x est strictement croissant
-                    sorted_points = points[np.argsort(points[:, 0])]
-                    x_sorted = sorted_points[:, 0]
-                    y_sorted = sorted_points[:, 1]
+                x, y = points[:, 0], points[:, 1]
+    
+                nb_points = 700
+                # Générer le spline paramétrique
+                tck, u = splprep([x, y], s=0)
+                new_points = splev(np.linspace(0, 1, nb_points), tck)
 
-                    # Créer la spline
-                    spline = make_interp_spline(x_sorted, y_sorted, k=3)  # k=3 pour une spline cubique
+                x_new, y_new = new_points[0], new_points[1]
+                for elem_x, elem_y in zip(x_new, y_new):
+                    # Vérifier que y_value n'est pas NaN
+                    if not np.isnan(elem_y):
+                        # Convertir les coordonnées en entiers pour OpenCV
+                        int_x, int_y = int(elem_x), int(elem_y)
+                        if 0 <= int_x < self.width and 0 <= int_y < self.height:
+                            print(f"Tracé pour x={elem_x}: y={elem_y}")  # Affichez les valeurs pour le débogage
+                            cv2.circle(self.background_image, (int_x, int_y), 5, self.cursor, -1)
+                        je_peux = False
 
-                    # Tracer la courbe d'interpolation
-                    nb_points = 700
-                    x_new = np.linspace(x_sorted[0], x_sorted[-1], nb_points)
-                    y_new = spline(x_new)
-
-                    for elem_x, elem_y in zip(x_new, y_new):
-                        # Vérifier que y_value n'est pas NaN
-                        if not np.isnan(elem_y):
-                            # Convertir les coordonnées en entiers pour OpenCV
-                            int_x, int_y = int(elem_x), int(elem_y)
-                            if 0 <= int_x < self.width and 0 <= int_y < self.height:
-                                print(f"Tracé pour x={elem_x}: y={elem_y}")  # Affichez les valeurs pour le débogage
-                                cv2.circle(self.background_image, (int_x, int_y), 7, self.cursor, -1)
-                            je_peux = False
+            if key == ord('r'):
+                self.chemin.apply_texture_to_grid(self.background_image, self.points)
 
             # Quitter si 'q' est pressé
-            if key == ord('q'):
+            if key == ord('q') or key == 27:
                 break
 
         # Quitter OpenCV
