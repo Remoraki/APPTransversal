@@ -90,9 +90,5 @@ def draw_spline_with_width(image, points, color, width):
         cv2.line(image, tuple(p1_right), tuple(p2_right), (255, 0, 0), 2)
 
 
-def is_point_on_path(x, y, point, buffer=5):
-    distance = np.sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
-    if distance <= buffer:
-        return True
-
-    return False
+def distance_from_path(contour, x, y):
+    return cv2.pointPolygonTest(contour, (x, y), True)

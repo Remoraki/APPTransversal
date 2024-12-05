@@ -29,6 +29,11 @@ class PathDrawer:
         self.draw_grid()
         
         self.spline_drawn = False
+        
+        nb_cols = width // grid_size[0] + width % grid_size[0]
+        nb_rows = height // grid_size[1] + height % grid_size[1]
+        
+        self.grid = np.zeros((nb_rows, nb_cols), dtype=bool)
     
     def select_points(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -37,7 +42,8 @@ class PathDrawer:
             cv2.imshow("Path from Points", self.image)
             
     def reset_image(self):
-        self.image = np.copy(self.background) 
+        self.image = np.copy(self.background)
+        self.draw_grid()
     
     def draw_path(self):
         if len(self.selected_points) == 2:
@@ -82,6 +88,12 @@ class PathDrawer:
     
         grid_width, grid_height = self.grid_size
         resized_texture = cv2.resize(self.path_texture, self.grid_size)
+        resized_texture_mask = cv2.resize(self.path_texture_mask, self.grid_size)
+        
+        if len(resized_texture_mask.shape) == 3:
+            resized_texture_mask = cv2.cvtColor(resized_texture_mask, cv2.COLOR_BGR2GRAY)
+        
+        contours, _ = cv2.findContours(resized_texture_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         rows, cols = self.image.shape[:2]
         num_rows = rows // grid_height
@@ -94,8 +106,12 @@ class PathDrawer:
                 for dy in range(-half_path_width, half_path_width + 1, grid_height // 8):   
                     grid_x = int((x + dx) // grid_width)
                     grid_y = int((y + dy) // grid_height)
+                    
+                    is_within_grid = 0 <= grid_x <= num_cols and 0 <= grid_y <= num_rows
+                    drawn = self.grid[grid_y, grid_x]
 
-                    if 0 <= grid_x <= num_cols and 0 <= grid_y <= num_rows:
+                    if is_within_grid and not drawn:
+                        self.grid[grid_y, grid_x] = True    
                         
                         # Calculate the top-left corner of the grid cell
                         top_left_x = grid_x * grid_width
@@ -106,9 +122,25 @@ class PathDrawer:
                         y_start = int(max(0, top_left_y))
                         x_end = int(min(self.image.shape[1], x_start + grid_width))
                         y_end = int(min(self.image.shape[0], y_start + grid_height))
-
-                        texture_roi = resized_texture[: y_end - y_start, : x_end - x_start]
-
+                        
+                        mask = np.zeros((grid_height, grid_width), dtype=np.uint8)
+                        
+                        for contour in contours:
+                            contour_s = contour.squeeze()
+                            contour_s[:, 0] += x_start
+                            contour_s[:, 1] += y_start
+                            
+                            # Check if the contour is within the path width
+                            is_within_path = distance_from_path(contour_s, x, y) <= half_path_width
+                            
+                            if is_within_path:
+                                mask = cv2.fillPoly(mask, [contour], 255)
+                        
+                        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+                        
+                        texture_roi = self.image[y_start:y_end, x_start:x_end]
+                        texture_roi = cv2.bitwise_and(resized_texture, 255 - mask)
+                        texture_roi += cv2.bitwise_and(resized_texture, mask)
                         self.image[y_start:y_end, x_start:x_end] = texture_roi
                 
         self.draw_grid()
