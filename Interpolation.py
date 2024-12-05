@@ -10,7 +10,7 @@ class LoadIm():
         self.background = (0, 0, 0)
         self.cursor = (0, 0, 255)
 
-        self.screen = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        
 
         # Charger l'image de texture (background)
         self.background_image = cv2.imread(texture_path)
@@ -34,6 +34,7 @@ class LoadIm():
 
     def run(self):
         # Boucle principale
+        je_peux = True
         while True:
             # Appliquer la texture de fond
             self.screen = self.background_image.copy()
@@ -47,10 +48,10 @@ class LoadIm():
 
             # Attendre une touche
             key = cv2.waitKey(1) & 0xFF
-
-            if key == 13:  # Entrée pour activer l'interpolation
+            
+            if key == 13 and je_peux:  # Entrée pour activer l'interpolation
                 points = np.array(self.points)
-
+                
                 # Assurez-vous que vous avez au moins deux points pour l'interpolation
                 if len(points) > 1:
                     # Tri des points pour s'assurer que x est strictement croissant
@@ -58,20 +59,23 @@ class LoadIm():
                     x_sorted = sorted_points[:, 0]
                     y_sorted = sorted_points[:, 1]
 
-                    # Interpolation par spline cubique
+                    # Créer la spline
                     spline = make_interp_spline(x_sorted, y_sorted, k=3)  # k=3 pour une spline cubique
 
                     # Tracer la courbe d'interpolation
-                    nb_points = 400
-                    for elem_x in np.linspace(x_sorted[0], x_sorted[-1], nb_points):  # Tracer sur toute la plage x
-                        # Interpolation pour obtenir la coordonnée y correspondante
-                        y_value = spline(elem_x)
+                    nb_points = 700
+                    x_new = np.linspace(x_sorted[0], x_sorted[-1], nb_points)
+                    y_new = spline(x_new)
 
+                    for elem_x, elem_y in zip(x_new, y_new):
                         # Vérifier que y_value n'est pas NaN
-                        if not np.isnan(y_value):
+                        if not np.isnan(elem_y):
                             # Convertir les coordonnées en entiers pour OpenCV
-                            print(f"Tracé pour x={elem_x}: y={y_value}")  # Affichez les valeurs pour le débogage
-                            cv2.circle(self.screen, (int(elem_x), int(y_value)), 5, self.cursor, -1)
+                            int_x, int_y = int(elem_x), int(elem_y)
+                            if 0 <= int_x < self.width and 0 <= int_y < self.height:
+                                print(f"Tracé pour x={elem_x}: y={elem_y}")  # Affichez les valeurs pour le débogage
+                                cv2.circle(self.background_image, (int_x, int_y), 7, self.cursor, -1)
+                            je_peux = False
 
             # Quitter si 'q' est pressé
             if key == ord('q'):
