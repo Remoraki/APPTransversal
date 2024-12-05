@@ -76,9 +76,6 @@ def draw_spline_with_width(image, points, color, width):
         pt2 = np.array([int(x_new[i + 1]), int(y_new[i + 1])])
 
         tangent = tangents[i]
-        tangent_length = np.linalg.norm(tangent)
-        if tangent_length != 0:  # Normalize the tangent
-            tangent = tangent / tangent_length
 
         normal = np.array([-tangent[1], tangent[0]])
 
@@ -91,3 +88,15 @@ def draw_spline_with_width(image, points, color, width):
 
         cv2.line(image, tuple(p1_left), tuple(p2_left), (255, 0, 0), 2)
         cv2.line(image, tuple(p1_right), tuple(p2_right), (255, 0, 0), 2)
+
+
+def is_point_on_path(points, point, buffer=5):
+    x_new, y_new = calculate_spline(points)
+    
+    # Check the distance of the point to all spline points
+    for x, y in zip(x_new, y_new):
+        distance = np.sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
+        if distance <= buffer:
+            return True
+
+    return False

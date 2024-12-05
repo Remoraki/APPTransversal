@@ -4,7 +4,7 @@ from utils import *
 class PathDrawer:
     def __init__(
         self, path_texture, grass_texture, 
-        height=600, width=800, grid_size=(64, 64), path_width=100,
+        height=600, width=800, grid_size=(64, 64), path_width=50,
         points_color=(255, 255, 255), line_color=(255, 0, 255)
     ):
         self.selected_points = []
@@ -76,20 +76,32 @@ class PathDrawer:
     
         grid_width, grid_height = self.grid_size
         resized_texture = cv2.resize(self.path_texture, self.grid_size)
+        
+        rows, cols = self.image.shape[:2]
+        num_rows = rows // grid_height
+        num_cols = cols // grid_width
+        
+        half_path_width = self.path_width // 2
 
-        # Determine which grid cells the path overlaps
         for x, y in zip(x_new, y_new):
-            grid_x = int(x // grid_width)
-            grid_y = int(y // grid_height)
+            for dx in range(-half_path_width, half_path_width + 1, grid_width):
+                for dy in range(-half_path_width, half_path_width + 1, grid_height):
+                    grid_x = int((x + dx) // grid_width)
+                    grid_y = int((y + dy) // grid_height)
 
-            top_left_x = grid_x * grid_width
-            top_left_y = grid_y * grid_height
+                    if 0 <= grid_x < num_cols and 0 <= grid_y < num_rows:
+                        # Calculate the top-left corner of the grid cell
+                        top_left_x = grid_x * grid_width
+                        top_left_y = grid_y * grid_height
 
-            x_start = max(0, top_left_x)
-            y_start = max(0, top_left_y)
-            x_end = min(self.image.shape[1], x_start + grid_width)
-            y_end = min(self.image.shape[0], y_start + grid_height)
+                        # Clip texture to fit within canvas boundaries
+                        x_start = max(0, top_left_x)
+                        y_start = max(0, top_left_y)
+                        x_end = min(self.image.shape[1], x_start + grid_width)
+                        y_end = min(self.image.shape[0], y_start + grid_height)
 
-            texture_roi = resized_texture[: y_end - y_start, : x_end - x_start]
+                        texture_roi = resized_texture[: y_end - y_start, : x_end - x_start]
 
-            self.image[y_start:y_end, x_start:x_end] = texture_roi
+                        self.image[y_start:y_end, x_start:x_end] = texture_roi
+        
+        
