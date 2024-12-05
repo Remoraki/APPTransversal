@@ -3,14 +3,18 @@ import sys
 import numpy as np
 
 class Chemin():
-    def __init__(self, texture_path="Textures/texture7"):
+    def __init__(self, width,height,texture_path="Textures/texture7"):
         # Charger l'image de texture
         self.chemin = cv2.imread(f"{texture_path}.png")
         if self.chemin is None:
             print("Erreur : impossible de charger l'image de texture.")
             sys.exit()
 
+        self.width_chemin = width/16
+        self.height_chemin = height/16
         # Obtenir les dimensions de la texture
+
+        self.chemin = cv2.resize(self.chemin, (self.width_chemin, self.height_chemin))
         self.texture_height, self.texture_width = self.chemin.shape[:2]
 
     def apply_texture(self, screen, x, y):
