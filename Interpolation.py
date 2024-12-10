@@ -113,6 +113,27 @@ class LoadIm():
                             cv2.circle(self.screen, (int_x, int_y), 3, self.cursor, -1)
                         je_peux = False
 
+            elif key == 13:  # Lorsque l'utilisateur valide
+                # Charger le fichier segmenté
+                self.chemin.load_segmented_image()
+
+
+                #self.chemin.display_extracted_cailloux(self.chemin.extract_cailloux())
+                # Calculer les voisins
+                self.chemin.calculate_neighbors(max_distance=20)
+
+
+                self.chemin.display_neighbors()
+                # Marquer les cailloux dans le chemin
+                #self.chemin.mark_cailloux_in_path(self.chemin.mask)
+
+                # Supprimer les cailloux à l'extérieur
+                #self.chemin.remove_outside_cailloux()
+
+                # Mettre à jour l'affichage
+                self.chemin.apply_texture_to_grid(self.screen)
+                cv2.imshow("Résultat", self.screen)
+
             if key == ord('r'):
                 self.chemin.apply_texture_to_grid(self.screen)
                 for point in self.points:
