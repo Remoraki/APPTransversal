@@ -87,7 +87,7 @@ class LoadIm():
 
             # Attendre une touche
             key = cv2.waitKey(1) & 0xFF
-            
+            masque = 'faut_init'
             if key == 13 and je_peux:  # Entrée pour activer l'interpolation
                 points = np.array(self.points)
                 
@@ -108,22 +108,23 @@ class LoadIm():
                         if 0 <= int_x < self.width and 0 <= int_y < self.height:
                             self.chemin.update_visibility(int_x, int_y)
                             # 30 pixels d'écart 
-                            self.draw_parallel_lines(x_new, y_new, 10)
+                            masque = self.draw_parallel_lines(x_new, y_new, 10)
                             self.points.append((int_x, int_y))
                             cv2.circle(self.screen, (int_x, int_y), 3, self.cursor, -1)
+                            
                         je_peux = False
-
+                print(masque)
             elif key == 13:  # Lorsque l'utilisateur valide
                 # Charger le fichier segmenté
-                self.chemin.load_segmented_image()
+                self.chemin.load_and_process()
 
 
                 #self.chemin.display_extracted_cailloux(self.chemin.extract_cailloux())
                 # Calculer les voisins
-                self.chemin.calculate_neighbors(max_distance=20)
+                
 
 
-                self.chemin.display_neighbors()
+                #self.chemin.display_neighbors()
                 # Marquer les cailloux dans le chemin
                 #self.chemin.mark_cailloux_in_path(self.chemin.mask)
 

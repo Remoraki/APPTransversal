@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import sys
 
 class Chemin():
     def __init__(self, width, height, nb_blocksx, nb_blocksy, texture_path="Textures/texture7"):
@@ -19,10 +20,51 @@ class Chemin():
         # Redimensionner la texture pour qu'elle corresponde à la taille des blocs
         self.chemin = cv2.resize(self.chemin, (self.block_width, self.block_height))
 
+        # Charger le masque (image segmentée)
         self.mask = cv2.imread(f"{texture_path}_masque.png", cv2.IMREAD_GRAYSCALE)
 
         # Créer une grille de visibilité des blocs
         self.visible_blocks = np.zeros((nb_blocksy, nb_blocksx), dtype=bool)
+
+    def repeat_texture(self):
+        """Répète la tuile et le masque dans une image 3x3."""
+        # Répéter la texture dans une grille 3x3
+        repeated_texture = np.tile(self.chemin, (3, 3, 1))
+
+        # Répéter le masque dans une grille 3x3
+        repeated_mask = np.tile(self.mask, (3, 3))
+
+        return repeated_texture, repeated_mask
+
+    def find_and_merge_contours(self, mask):
+        """Trouver les contours dans l'image répétée et fusionner les cailloux répétitifs."""
+        # Trouver les contours dans l'image répétée
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Utiliser un ensemble pour garder seulement les contours uniques
+        unique_contours = set()
+
+        for contour in contours:
+            # Convertir le contour en tuple pour pouvoir l'ajouter à un ensemble
+            contour_tuple = tuple(map(tuple, contour[:, 0, :]))
+            unique_contours.add(contour_tuple)
+
+        return unique_contours
+
+    def display_unique_contours(self, repeated_texture, unique_contours):
+        """Afficher les contours uniques dans une fenêtre séparée."""
+        # Créer une image vide pour afficher les contours
+        contour_image = repeated_texture.copy()
+
+        # Dessiner les contours sur l'image
+        for contour in unique_contours:
+            contour_np = np.array(contour, dtype=np.int32)
+            cv2.drawContours(contour_image, [contour_np], -1, (0, 255, 0), 2)
+
+        # Afficher l'image avec les contours uniques
+        cv2.imshow("Contours Uniques", contour_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     def draw_grid(self, screen):
         """Dessine une grille avec un nombre défini de blocs en x et y."""
@@ -55,7 +97,7 @@ class Chemin():
             self.visible_blocks[i, j] = True
 
     def load_segmented_image(self):
-        """Charge l'image segmentée et affiche les contours des cailloux."""
+        """Charge l'image segmentée et identifie les cailloux réellement coupés."""
         # Trouver les contours des cailloux
         contours, _ = cv2.findContours(self.mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -64,36 +106,30 @@ class Chemin():
         height, width = self.mask.shape
 
         for i, contour in enumerate(contours):
-            # Vérifier si le caillou touche les bords
+            # Vérifier si le caillou est réellement coupé entre deux bords opposés
             touches_left = np.any(contour[:, 0, 0] == 0)
             touches_right = np.any(contour[:, 0, 0] == width - 1)
             touches_top = np.any(contour[:, 0, 1] == 0)
             touches_bottom = np.any(contour[:, 0, 1] == height - 1)
 
-            # Si le caillou ne touche pas les bords, c'est une entité complète
-            if not (touches_left or touches_right or touches_top or touches_bottom):
-                self.cailloux[i] = {
-                    "contour": contour,
-                    "neighbors": set(),
-                    "inside_path": False,  # Statut initial
-                }
-                continue
+            # Vérifier si le contour est coupé entre des bords opposés
+            is_cut = (touches_left and touches_right) or (touches_top and touches_bottom)
 
-            # Reconstituer les cailloux qui touchent les bords
-            new_contour = contour.copy()
-            if touches_left:
-                new_contour = np.vstack((new_contour, contour[contour[:, 0, 0] == width - 1]))
-            if touches_right:
-                new_contour = np.vstack((new_contour, contour[contour[:, 0, 0] == 0]))
-            if touches_top:
-                new_contour = np.vstack((new_contour, contour[contour[:, 0, 1] == height - 1]))
-            if touches_bottom:
-                new_contour = np.vstack((new_contour, contour[contour[:, 0, 1] == 0]))
+            # Si le caillou est coupé, reconstruire son contour
+            if is_cut:
+                new_contour = contour.copy()
+                if touches_left and touches_right:
+                    new_contour = np.vstack((new_contour, contour[contour[:, 0, 0] == width - 1]))
+                if touches_top and touches_bottom:
+                    new_contour = np.vstack((new_contour, contour[contour[:, 0, 1] == height - 1]))
+            else:
+                new_contour = contour  # Contour intact
 
             self.cailloux[i] = {
                 "contour": new_contour,
                 "neighbors": set(),
                 "inside_path": False,  # Statut initial
+                "is_cut": is_cut,  # Nouveau statut pour les cailloux réellement coupés
             }
 
         # Créer une image pour afficher les contours
@@ -101,8 +137,9 @@ class Chemin():
 
         # Dessiner les contours sur l'image
         for i, caillou in self.cailloux.items():
-            cv2.drawContours(contour_image, [caillou["contour"]], -1, (0, 255, 0), 2)
-            print(f"Caillou {i}: {caillou['contour']}")
+            color = (0, 255, 0) if not caillou["is_cut"] else (0, 0, 255)  # Rouge pour les cailloux coupés
+            cv2.drawContours(contour_image, [caillou["contour"]], -1, color, 2)
+            print(f"Caillou {i}: IsCut={caillou['is_cut']}")
 
         # Afficher l'image avec les contours
         cv2.imshow("Contours des cailloux", contour_image)
@@ -123,22 +160,13 @@ class Chemin():
                     self.cailloux[i]["neighbors"].add(j)
                     self.cailloux[j]["neighbors"].add(i)
 
-    def display_neighbors(self):
-        """Affiche les voisins de chaque caillou."""
-        neighbor_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+    def load_and_process(self):
+        """Fonction principale pour charger l'image, trouver les contours et afficher les résultats."""
+        # Répéter la texture et le masque dans une grille 3x3
+        repeated_texture, repeated_mask = self.repeat_texture()
 
-        for i, caillou in self.cailloux.items():
-            # Dessiner le contour du caillou
-            cv2.drawContours(neighbor_image, [caillou["contour"]], -1, (0, 255, 0), 2)
-            # Dessiner les lignes vers les voisins
-            for neighbor in caillou["neighbors"]:
-                neighbor_contour = self.cailloux[neighbor]["contour"]
-                pt1 = tuple(caillou["contour"][0][0])
-                pt2 = tuple(neighbor_contour[0][0])
-                cv2.line(neighbor_image, pt1, pt2, (255, 0, 0), 1)
-                print(f"Caillou {i} est voisin avec Caillou {neighbor}")
+        # Trouver les contours uniques dans l'image répétée
+        unique_contours = self.find_and_merge_contours(repeated_mask)
 
-        # Afficher l'image avec les voisins
-        cv2.imshow("Voisins des cailloux", neighbor_image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # Afficher l'image avec les contours uniques
+        self.display_unique_contours(repeated_texture, unique_contours)
