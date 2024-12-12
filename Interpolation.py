@@ -118,7 +118,7 @@ class LoadIm():
                 # Charger le fichier segmenté
                 self.chemin.load_and_process()
 
-
+                self.chemin.process_cailloux_in_window()
                 #self.chemin.display_extracted_cailloux(self.chemin.extract_cailloux())
                 # Calculer les voisins
                 
