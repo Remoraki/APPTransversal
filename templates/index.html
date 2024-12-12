@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Point Interpolation</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: black; }
+        canvas { border: 1px solid white; cursor: crosshair; width: 600px; height: 600px; }
+        #info { color: white; font-family: Arial, sans-serif; text-align: center; margin-top: 20px; }
+        #processedImage {
+            margin-bottom: 10px;
+            border: 2px solid white;
+            max-width: 600px;
+            max-height: 600px;
+            }
+    </style>
+</head>
+<body>
+    <img id="processedImage" style="display: none;" alt="Processed Image">
+    <canvas id="canvas" width="3000" height="3000"></canvas>
+    <div id="info">Start Adding points and the path will be generated.</div>
+    <button id="uploadImage" style="position: absolute; top: 800px; background-color: #333; color: white; padding: 10px;">Upload Image</button>
+    <script>
+        
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadImageBtn = document.getElementById('uploadImage');
+        const processedImage = document.getElementById('processedImage');
+        let points = [];
+        
+        // Draw the points and path on the canvas
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            
+            // Draw the points
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p[0], p[1], 5, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        // Add point on click
+        canvas.addEventListener('click', function(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (event.clientX - rect.left)*5;
+            const y = (event.clientY - rect.top)*5;
+            points.push([x, y]);
+            draw();
+            if (points.length >= 2) {
+                // Send points to the backend for interpolation
+                fetch('/interpolate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ points: points })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        // Draw the interpolated path
+                        const interpolatedPoints = data.interpolated_points;
+                        ctx.strokeStyle = 'lime';
+                        ctx.lineWidth = 10;
+                        ctx.beginPath();
+                        ctx.moveTo(interpolatedPoints[0][0], interpolatedPoints[0][1]);
+                        interpolatedPoints.forEach(p => {
+                            ctx.lineTo(p[0], p[1]);
+                        });
+                        ctx.stroke();
+
+                        // Draw the left boundary
+                        const leftBoundary = data.left_boundary;
+                        ctx.strokeStyle = 'red';
+                        ctx.lineWidth = 10;
+                        ctx.beginPath();
+                        ctx.moveTo(leftBoundary[0][0], leftBoundary[0][1]);
+                        leftBoundary.forEach(p => {
+                            ctx.lineTo(p[0], p[1]);
+                        });
+                        ctx.stroke();
+
+                        // Draw the right boundary
+                        const rightBoundary = data.right_boundary;
+                        ctx.strokeStyle = 'red';
+                        ctx.lineWidth = 10;
+                        ctx.beginPath();
+                        ctx.moveTo(rightBoundary[0][0], rightBoundary[0][1]);
+                        rightBoundary.forEach(p => {
+                            ctx.lineTo(p[0], p[1]);
+                        });
+                        ctx.stroke();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            }
+        });
+        
+        // Upload image
+        uploadImageBtn.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+
+            input.addEventListener('change', () => {
+                const file = input.files[0];
+                if (file) {
+                    const formData = new FormData();
+                    formData.append('image', file);
+
+                    fetch('/process_image', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const url = URL.createObjectURL(blob);
+                        processedImage.src = url;
+                        processedImage.style.display = 'block';
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+                }
+            });
+
+            input.click();
+        });
+
+    </script>
+</body>
+</html>
