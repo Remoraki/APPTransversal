@@ -107,180 +107,74 @@ class Chemin():
 
         # Afficher l'image avec les contours uniques
        
-        contours,_ = cv2.findContours(repeated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        self.display_unique_contours(repeated_mask, contours)
+        contours_de_mort,_ = cv2.findContours(repeated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        self.display_unique_contours(repeated_mask, contours_de_mort)
 
-        
-
-    def calculate_neighbors(self, max_distance=10):
-        """Calcule les voisins de chaque caillou en fonction de la proximité."""
-        for i, caillou_a in self.cailloux.items():
-            for j, caillou_b in self.cailloux.items():
-                if i == j:
-                    continue
-
-                pt = tuple(map(int, caillou_a["contour"][0][0]))
-                # Vérifier si les contours sont proches
-                distance = cv2.pointPolygonTest(caillou_b["contour"], pt, True)
-                if distance < max_distance:
-                    self.cailloux[i]["neighbors"].add(j)
-                    self.cailloux[j]["neighbors"].add(i)
-
-    def get_connected_components(self):
-        """Obtient les composants connectés des cailloux."""
-        visited = set()
-        components = []
-
-        def dfs(caillou_id, component):
-            stack = [caillou_id]
-            while stack:
-                current = stack.pop()
-                if current not in visited:
-                    visited.add(current)
-                    component.append(current)
-                    stack.extend(self.cailloux[current]["neighbors"])
-
-        for caillou_id in self.cailloux:
-            if caillou_id not in visited:
-                component = []
-                dfs(caillou_id, component)
-                components.append(component)
-
-        return components
-
-    def display_connected_components(self):
-        """Affiche les composants connectés des cailloux."""
-        # Répéter la texture et le masque dans une image 3x3
-        repeated_texture, repeated_mask = self.repeat_texture()
-
-        # Trouver les contours uniques dans l'image répétée
-        unique_contours = self.find_and_merge_contours(repeated_mask)
-
-        # Créer une image vide pour afficher les contours
-        component_image = repeated_texture.copy()
-        compona = cv2.cvtColor(component_image, cv2.COLOR_GRAY2BGR)
-        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255), (255, 0, 255)]
-
-        # Obtenir les composants connectés
-        components = self.get_connected_components()
-
-        for idx, component in enumerate(components):
-            color = colors[idx % len(colors)]
-            for caillou_id in component:
-                cv2.drawContours(compona, [self.cailloux[caillou_id]["contour"]], -1, (255,0,0), 2)
-                print(f"Composant {idx}: Caillou {caillou_id}")
-
-        # Afficher l'image avec les composants connectés
-        cv2.imshow("Composants connectés des cailloux", compona)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        return contours_de_mort
 
 
+    def find_centered_window(self, repeated_mask, center_tile=(1, 1), tile_size=1):
+        """Créer une fenêtre centrée de 2x2 tuiles."""
 
-    def find_contours_in_centered_window(self, repeated_mask, center_tile=(1, 1), tile_size=2):
-        """Trouver les contours dans une fenêtre centrée de taille 2 tuiles."""
-        x_start = (center_tile[0] - tile_size) * self.block_width
-        y_start = (center_tile[1] - tile_size) * self.block_height
-        x_end = (center_tile[0] + tile_size + 1) * self.block_width
-        y_end = (center_tile[1] + tile_size + 1) * self.block_height
+        milieux = repeated_mask.shape[0] // 2, repeated_mask.shape[1] // 2
+        print(milieux , "milieux")
+        x_start = (milieux[0] - self.width) 
+        y_start = (milieux[1] - self.height) 
+        x_end = (milieux[0] + self.width) 
+        y_end = (milieux[1] + self.height) 
 
-        # Découper la fenêtre dans le masque répété
+        # Découper la fenêtre du masque répété
         mask_window = repeated_mask[y_start:y_end, x_start:x_end]
 
-        # Trouver les contours dans la fenêtre découpée
-        contours, _ = cv2.findContours(mask_window, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        return contours, mask_window, (x_start, y_start)
+        return mask_window, (x_start, y_start, x_end, y_end)
 
-
-    def filter_contours_within_window(self, contours, mask_window):
-        """Conserver les contours qui se trouvent dans la fenêtre centrée de taille 2 tuiles."""
+    def filter_contours_in_window(self, contours, mask_window, window_coords):
+        """Filtrer et garder uniquement les contours à l'intérieur de la fenêtre."""
         filtered_contours = []
+        x_start, y_start, x_end, y_end = window_coords
         height, width = mask_window.shape
 
         for contour in contours:
             # Vérifier si tous les points du contour sont à l'intérieur de la fenêtre
-            if np.all((0 <= contour[:, 0, 0]) & (contour[:, 0, 0] < width) &
-                    (0 <= contour[:, 0, 1]) & (contour[:, 0, 1] < height)):
+            inside_window = True
+            for point in contour:
+                pt = tuple(point[0])
+                if not (x_start <= pt[0] < x_end and y_start <= pt[1] < y_end):
+                    inside_window = False
+                    break
+            
+            if inside_window:
                 filtered_contours.append(contour)
 
         return filtered_contours
 
+    def display_filtered_contours(self, repeated_mask, filtered_contours):
+        """Afficher les contours filtrés dans la fenêtre."""
+        # Créer une image pour afficher les résultats
+        result_image = cv2.cvtColor(repeated_mask, cv2.COLOR_GRAY2BGR)  # Convertir en image colorée
 
-    def create_neighbors_graph(self, contours):
-        """Créer un graphe des voisins basé sur les contours."""
-        cailloux_graph = {}
-        for i, contour_a in enumerate(contours):
-            cailloux_graph[i] = {"contour": contour_a, "neighbors": set()}
-
-        # Ajouter des voisins à partir de la distance entre les cailloux
-        for i, caillou_a in cailloux_graph.items():
-            for j, caillou_b in cailloux_graph.items():
-                if i == j:
-                    continue
-                # Calculer la distance entre les contours
-                distance = cv2.pointPolygonTest(caillou_b["contour"], tuple(caillou_a["contour"][0][0]), True)
-                if distance < 10:  # Distance seuil pour déterminer si les cailloux sont voisins
-                    cailloux_graph[i]["neighbors"].add(j)
-                    cailloux_graph[j]["neighbors"].add(i)
-
-        return cailloux_graph
-
-
-    def update_connectivity_on_duplicates(self, cailloux_graph):
-        """Mettre à jour la connectivité des cailloux en supprimant les doublons."""
-        visited = set()
-        for caillou_id, caillou in list(cailloux_graph.items()):
-            # Si le caillou a déjà été visité, le supprimer du graphe
-            if caillou_id in visited:
-                del cailloux_graph[caillou_id]
-                continue
-
-            visited.add(caillou_id)
-            for neighbor_id in caillou["neighbors"]:
-                # Si un voisin existe qui est un doublon de taille, fusionner les deux
-                if len(cailloux_graph[caillou_id]["contour"]) == len(cailloux_graph[neighbor_id]["contour"]):
-                    # Fusionner les contours
-                    cailloux_graph[caillou_id]["neighbors"].update(cailloux_graph[neighbor_id]["neighbors"])
-                    # Supprimer le caillou dupliqué
-                    del cailloux_graph[neighbor_id]
-
-        return cailloux_graph
-
-
-    def process_cailloux_in_window(self):
-        """Traite les cailloux dans une fenêtre centrée avec un rayon défini, en mettant à jour le graphe des voisins et la connectivité."""
-        # Étape 1 : Répéter la texture et le masque
-        repeated_texture, repeated_mask = self.repeat_texture()
-
-        # Étape 2 : Trouver les contours dans la fenêtre centrée de taille 2 tuiles
-        contours, mask_window, offset = self.find_contours_in_centered_window(repeated_mask)
-
-        # Étape 3 : Filtrer les contours qui sont dans la fenêtre
-        filtered_contours = self.filter_contours_within_window(contours, mask_window)
-
-        # Étape 4 : Créer un graphe des voisins
-        cailloux_graph = self.create_neighbors_graph(filtered_contours)
-
-        # Étape 5 : Mettre à jour la connectivité des cailloux en supprimant les doublons
-        updated_cailloux_graph = self.update_connectivity_on_duplicates(cailloux_graph)
-
-        # Afficher les contours restants dans la fenêtre
-        result_image = repeated_mask.copy()
-        RESULT_rgb = cv2.cvtColor(result_image, cv2.COLOR_GRAY2BGR)
+        # Dessiner les contours filtrés
         for contour in filtered_contours:
-            cv2.drawContours(RESULT_rgb, [contour + np.array(offset)], -1, (255, 255, 0), 3)
+            cv2.drawContours(result_image, [contour], -1, (0, 255, 0), 2)
 
-        # Dessiner la grille sur l'image
-        self.draw_grid(RESULT_rgb)
-
-        # Afficher l'image finale et le graphe
-        cv2.imshow("Contours et Graphe des voisins", RESULT_rgb)
+        # Afficher l'image avec les contours filtrés
+        cv2.imshow("Contours dans la fenêtre centrée", result_image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-        # Afficher le mapping dans la console
-        print("Mapping des cailloux restants :")
-        for caillou_id, caillou in updated_cailloux_graph.items():
-            print(f"Caillou {caillou_id}: Contour = {caillou['contour']}, Neighbors = {caillou['neighbors']}")
+    def process_centered_window(self):
+       
+        #la giga fenetre
+        contours_de_mort = self.load_and_process()
 
-        return updated_cailloux_graph
+        repeated_texture, repeated_mask = self.repeat_texture()
+
+        
+        mask_window, window_coords = self.find_centered_window(repeated_mask)
+        
+        print("coord de morts egalement", window_coords)
+        # Étape 4 : Filtrer les contours dans la fenêtre
+        filtered_contours = self.filter_contours_in_window(contours_de_mort, mask_window, window_coords)
+
+        # Étape 5 : Afficher les contours filtrés
+        self.display_filtered_contours(repeated_mask, filtered_contours)

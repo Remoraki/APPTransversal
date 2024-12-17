@@ -57,8 +57,8 @@ class LoadIm():
             int_x2b, int_y2b = int(x2 - offset_x), int(y2 - offset_y)
 
             # Tracer les lignes parallèles sur le masque
-            cv2.line(mask, (int_x1a, int_y1a), (int_x2a, int_y2a), 255, thickness)
-            cv2.line(mask, (int_x1b, int_y1b), (int_x2b, int_y2b), 255, thickness)
+            cv2.line(self.screen, (int_x1a, int_y1a), (int_x2a, int_y2a), (255,255,0), thickness)
+            cv2.line(self.screen, (int_x1b, int_y1b), (int_x2b, int_y2b), (255,255,0) , thickness)
 
             # Révéler les tuiles touchées avec update_visibility (optionnel)
             self.chemin.update_visibility(int_x1a, int_y1a)
@@ -116,9 +116,8 @@ class LoadIm():
                 print(masque)
             elif key == 13:  # Lorsque l'utilisateur valide
                 # Charger le fichier segmenté
-                self.chemin.load_and_process()
 
-                self.chemin.process_cailloux_in_window()
+                self.chemin.process_centered_window()
                 #self.chemin.display_extracted_cailloux(self.chemin.extract_cailloux())
                 # Calculer les voisins
                 
