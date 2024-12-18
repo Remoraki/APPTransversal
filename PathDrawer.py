@@ -149,11 +149,20 @@ class PathDrawer:
         mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
         mask = cv2.bitwise_and(mask, self.image)
         
+        filtered_canvas = np.zeros_like(self.image)
+        
         for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            mask[y:y+h, x:x+w] = cv2.bitwise_and(mask[y:y+h, x:x+w], resized_texture)
+            contour_points = [tuple(point[0]) for point in contour]
             
-        self.image = cv2.addWeighted(self.image, 1, mask, 1, 0)          
+            if len(contour_points) >= 3:  # A valid polygon requires at least 3 points
+                contour_polygon = Polygon(contour_points)
+
+                if path_polygon.intersects(contour_polygon):
+                    cv2.fillPoly(filtered_canvas, [np.array(contour_points)], (255, 255, 255))
+                    
+        filtered_canvas = cv2.bitwise_and(filtered_canvas, mask)
+        self.image = cv2.addWeighted(self.image, 1, filtered_canvas, 1, 0)
+        
                 
         self.draw_grid()
 
