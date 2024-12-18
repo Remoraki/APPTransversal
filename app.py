@@ -69,20 +69,29 @@ def interpolate():
 
 @app.route('/process_image', methods=['POST'])
 def process_image():
-    file = request.files['image']
+    nb_ite_dilate = 0
+    file = request.files['texture']
     if not file:
         return "No file provided", 400
-    
-    mask_file = "./textures/texture3_masque.png"
-    mask = Image.open(mask_file).convert("L")  # Convert mask to grayscale
-    
     # Open the image with PIL
     image = Image.open(file)
+
+    bg_file = request.files['background']
+    if not bg_file:
+        return "No file provided", 400
+    bg_image = Image.open(bg_file)
+    
+    # Open the mask using filename
+    mask_file = "./textures/" + file.filename.split('.')[0] + "_masque.png"
+    mask = Image.open(mask_file).convert("L")  # Convert mask to grayscale
+    
+    
     
     # Create a blank canvas (3000x3000 pixels)
     canvas_size = (3000, 3000)
     canvas = Image.new("L", canvas_size, color=0)
     canvas_colored = Image.new("RGB", canvas_size, color=(0, 0, 0))
+    canvas_background = Image.new("RGB", canvas_size, color=(0, 0, 0))
 
     # Define grid properties
     cell_size = 500  # Each image will be 500x500 pixels
@@ -92,6 +101,7 @@ def process_image():
     # Resize the uploaded image to fit the grid cell
     resized_image = image.resize((cell_size, cell_size))
     mask = mask.resize((cell_size, cell_size))
+    resized_bg_image = bg_image.resize((cell_size, cell_size))
 
     # Define the path polygon
     path_polygon = Polygon(np.concatenate([left_boundary, np.flip(right_boundary, axis=0)]))
@@ -109,10 +119,10 @@ def process_image():
 
             # Check if the cell center is inside the polygon
             if path_polygon.intersects(cell_polygon):
-                top_left_x = x * cell_size
-                top_left_y = y * cell_size
                 canvas_colored.paste(resized_image, (top_left_x, top_left_y))
                 canvas.paste(mask, (top_left_x, top_left_y))
+            #paste the background
+            canvas_background.paste(resized_bg_image, (top_left_x, top_left_y))
 
     # Convert the canvas to a numpy array for OpenCV processing
     canvas_array = np.array(canvas)
@@ -121,7 +131,7 @@ def process_image():
     inverted_mask = cv2.bitwise_not(canvas_array)
 
     # Dilate the inverted mask (expand black areas)
-    dilated_mask = cv2.dilate(inverted_mask, np.ones((5, 5), np.uint8), iterations=1)
+    dilated_mask = cv2.dilate(inverted_mask, np.ones((5, 5), np.uint8), iterations=nb_ite_dilate)
 
     # Re-invert the mask back to its original polarity
     canvas_array = cv2.bitwise_not(dilated_mask)
@@ -147,9 +157,20 @@ def process_image():
                 cv2.drawContours(
                     filtered_canvas, [np.array(contour_points, dtype=np.int32)], -1, (255, 0, 255), thickness=cv2.FILLED
                 )
+    # Dilate back the filtered canvas
+    filtered_canvas = cv2.dilate(filtered_canvas, np.ones((5, 5), np.uint8), iterations=nb_ite_dilate)
+
     # Apply the final mask to the colored canvas by multiplying
     canvas_colored_array = np.array(canvas_colored)  # Convert colored canvas to numpy array
-    final_canvas_array = cv2.bitwise_and(canvas_colored_array, canvas_colored_array, mask=filtered_canvas)
+    texture_colored_array = cv2.bitwise_and(canvas_colored_array, canvas_colored_array, mask=filtered_canvas)
+
+    #add the background in the inverse of the mask
+    canvas_background_array = np.array(canvas_background)
+    background_array = cv2.bitwise_and(canvas_background_array, canvas_background_array, mask=cv2.bitwise_not(filtered_canvas))
+
+    # Combine the texture and background
+    final_canvas_array = cv2.add(texture_colored_array, background_array)
+    
 
     # Convert the final canvas back to a PIL image
     final_canvas = Image.fromarray(final_canvas_array)

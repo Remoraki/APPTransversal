@@ -4,30 +4,84 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Point Interpolation</title>
-    <style>
-        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: black; }
-        canvas { border: 1px solid white; cursor: crosshair; width: 600px; height: 600px; }
-        #info { color: white; font-family: Arial, sans-serif; text-align: center; margin-top: 20px; }
-        #processedImage {
-            margin-bottom: 10px;
-            border: 2px solid white;
-            max-width: 600px;
-            max-height: 600px;
-            }
-    </style>
+    <!-- import CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">>
+
 </head>
 <body>
-    <img id="processedImage" style="display: none;" alt="Processed Image">
-    <canvas id="canvas" width="3000" height="3000"></canvas>
-    <div id="info">Start Adding points and the path will be generated.</div>
-    <button id="uploadImage" style="position: absolute; top: 800px; background-color: #333; color: white; padding: 10px;">Upload Image</button>
+
+     <div class="container">
+        <div >
+            <div id="info">Start Adding points and the path will be generated.</div>
+            <button id="uploadTexture">Upload Texture</button>
+            <button id="uploadBackground">Upload Background</button>
+            <button id="generatePath" disabled>Generate Path</button>
+        </div>
+        <div id="images-container">
+            <canvas id="canvas" width="3000" height="3000"></canvas>
+            <img id="processedImage" alt="Processed Image">
+        </div>
+    </div>
+    
     <script>
         
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const uploadImageBtn = document.getElementById('uploadImage');
+
+        const uploadTextureBtn = document.getElementById('uploadTexture');
+        const uploadBackgroundBtn = document.getElementById('uploadBackground');
+        const generatePathBtn = document.getElementById('generatePath');
         const processedImage = document.getElementById('processedImage');
+        let textureImage = null;
+        let backgroundImage = false;
         let points = [];
+
+        // Local Upload for Texture
+        uploadTextureBtn.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+
+            input.addEventListener('change', () => {
+                const file = input.files[0];
+                
+                if (file) {
+                    textureImage = file;
+                    console.log("Texture loaded locally.");
+                    uploadTextureBtn.textContent = "Texture Uploaded";
+                    // if texture and background uploaded, enable generate path button
+                    if (textureImage && backgroundImage) {
+                        generatePathBtn.disabled = false;
+                    }
+                }
+            });
+            input.click();
+        });
+
+
+
+        // Local Upload for Background
+        uploadBackgroundBtn.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+
+            input.addEventListener('change', () => {
+                const file = input.files[0];
+                if (file) {
+                    backgroundImage = file;
+                    console.log("Background loaded locally.");
+                    uploadBackgroundBtn.textContent = "Background Uploaded";
+                    // if texture and background uploaded, enable generate path button
+                    if (textureImage && backgroundImage) {
+                        generatePathBtn.disabled = false;
+                    }
+                }
+            });
+
+            input.click();
+            
+        });
         
         // Draw the points and path on the canvas
         function draw() {
@@ -103,35 +157,25 @@
             }
         });
         
-        // Upload image
-        uploadImageBtn.addEventListener('click', () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
+        // Generate Path and Send Background to Backend
+        generatePathBtn.addEventListener('click', () => {
+            const formData = new FormData();
+            formData.append('texture', textureImage);
+            formData.append('background', backgroundImage);
 
-            input.addEventListener('change', () => {
-                const file = input.files[0];
-                if (file) {
-                    const formData = new FormData();
-                    formData.append('image', file);
-
-                    fetch('/process_image', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.blob())
-                    .then(blob => {
-                        const url = URL.createObjectURL(blob);
-                        processedImage.src = url;
-                        processedImage.style.display = 'block';
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                    });
-                }
+            fetch('/process_image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                processedImage.src = url;
+                processedImage.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error:', error);
             });
-
-            input.click();
         });
 
     </script>
