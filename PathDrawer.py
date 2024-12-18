@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from shapely.geometry import Polygon
 from utils import *
 class PathDrawer:
     def __init__(
@@ -75,13 +76,25 @@ class PathDrawer:
         else:
             self.draw_path()
             cv2.imshow("Path from Points", self.image)
+            
+    def calculate_angle(self, x1, y1, x2, y2, tangent=None):
+        if tangent is None:
+            return np.degrees(np.arctan2(y2 - y1, x2 - x1))
+        else:
+            return np.degrees(np.arctan2(tangent[1], tangent[0]))
+    
+    def calculate_point(self, x, y, angle, distance):
+        angle = np.radians(angle)
+        x_new = x + distance * np.cos(angle)
+        y_new = y + distance * np.sin(angle)
+        return x_new, y_new
     
     def draw_path_with_texture(self):
         self.reset_image()
         if len(self.selected_points) == 2:
             x_new, y_new = calculate_lerp_points(self.selected_points[0], self.selected_points[1])
         elif len(self.selected_points) > 2:
-            x_new, y_new = calculate_spline(self.selected_points)
+            x_new, y_new, tangents = calculate_spline_with_tangents(self.selected_points)
         else:
             print("Need at least 2 points to draw a path")
             return
@@ -100,48 +113,47 @@ class PathDrawer:
         num_cols = cols // grid_width
         
         half_path_width = self.path_width // 2
-
-        for x, y in zip(x_new, y_new):
-            for dx in range(-half_path_width, half_path_width + 1, grid_width // 8):
-                for dy in range(-half_path_width, half_path_width + 1, grid_height // 8):   
-                    grid_x = int((x + dx) // grid_width)
-                    grid_y = int((y + dy) // grid_height)
-                    
-                    is_within_grid = 0 <= grid_x <= num_cols and 0 <= grid_y <= num_rows
-                    drawn = self.grid[grid_y, grid_x]
-
-                    if is_within_grid and not drawn:
-                        self.grid[grid_y, grid_x] = True    
-                        
-                        # Calculate the top-left corner of the grid cell
-                        top_left_x = grid_x * grid_width
-                        top_left_y = grid_y * grid_height
-
-                        # Clip texture to fit within canvas boundaries
-                        x_start = int(max(0, top_left_x))
-                        y_start = int(max(0, top_left_y))
-                        x_end = int(min(self.image.shape[1], x_start + grid_width))
-                        y_end = int(min(self.image.shape[0], y_start + grid_height))
-                        
-                        mask = np.zeros((grid_height, grid_width), dtype=np.uint8)
-                        
-                        for contour in contours:
-                            contour = contour.squeeze()
-                            contour[:, 0] += x_start
-                            contour[:, 1] += y_start
-                            
-                            # Check if the contour is within the path width
-                            is_within_path = distance_from_path(contour, x, y) <= half_path_width
-                            
-                            if is_within_path:
-                                mask = cv2.fillPoly(mask, [contour], 255)
-                        
-                        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-                        
-                        texture_roi = self.image[y_start:y_end, x_start:x_end]
-                        texture_roi = cv2.bitwise_and(resized_texture, 255 - mask)
-                        texture_roi += cv2.bitwise_and(resized_texture, mask)
-                        self.image[y_start:y_end, x_start:x_end] = texture_roi
+        
+        left_boundary = np.zeros((len(x_new), 2))
+        right_boundary = np.zeros((len(x_new), 2))
+        
+        for i, (x, y) in enumerate(zip(x_new, y_new)):
+            if i == 0:
+                continue
+            
+            if len(self.selected_points) == 2:
+                angle = self.calculate_angle(x_new[i - 1], y_new[i - 1], x, y)
+            else:
+                angle = self.calculate_angle(x_new[i - 1], y_new[i - 1], x, y, tangents[i - 1])
+            
+            left_boundary[i] = self.calculate_point(x, y, angle + 90, half_path_width)
+            right_boundary[i] = self.calculate_point(x, y, angle - 90, half_path_width)
+            
+            left_boundary[i] = (int(left_boundary[i][0]), int(left_boundary[i][1]))
+            right_boundary[i] = (int(right_boundary[i][0]), int(right_boundary[i][1]))
+        
+        path_polygon = Polygon(np.concatenate((left_boundary, right_boundary[::-1])))
+        
+        mask = np.zeros((rows, cols), dtype=np.uint8)
+        
+        for i in range(num_rows):
+            for j in range(num_cols):
+                top_left = (j * grid_width, i * grid_height)
+                top_right = (j * grid_width + grid_width, i * grid_height)
+                
+                grid_polygon = Polygon([top_left, top_right, (top_right[0], top_right[1] + grid_height), (top_left[0], top_left[1] + grid_height)])
+                
+                if path_polygon.intersects(grid_polygon):
+                    cv2.fillPoly(mask, [np.array([top_left, top_right, (top_right[0], top_right[1] + grid_height), (top_left[0], top_left[1] + grid_height)])], 255)
+        
+        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        mask = cv2.bitwise_and(mask, self.image)
+        
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            mask[y:y+h, x:x+w] = cv2.bitwise_and(mask[y:y+h, x:x+w], resized_texture)
+            
+        self.image = cv2.addWeighted(self.image, 1, mask, 1, 0)          
                 
         self.draw_grid()
 
